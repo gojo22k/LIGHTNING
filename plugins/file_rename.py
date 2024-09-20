@@ -343,11 +343,24 @@ async def process_file(client, message, media, new_name, media_type):
     except Exception as e:
         pass
 
+# Utility function to log errors to a file for debugging
+def log_error(error_message):
+    error_log_path = os.path.join("logs", "error_log.txt")
+    os.makedirs(os.path.dirname(error_log_path), exist_ok=True)
+    with open(error_log_path, "a") as f:
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {error_message}\n")
+
+
 async def generate_sample_video(client, message, file_path, new_name, duration=None):
     """Generate a sample video at a random moment and send it to the user."""
+    
+    # Use absolute paths for file storage to avoid relative path issues
+    downloads_dir = os.path.abspath("downloads")
+    os.makedirs(downloads_dir, exist_ok=True)
+
     # Correct the file naming
-    sample_name = f"SAMPLE_{new_name}"
-    sample_path = f"downloads/{sample_name}.mp4"
+    sample_name = f"SAMPLE_{new_name}.mp4"  # Fix double extension
+    sample_path = os.path.join(downloads_dir, sample_name)
 
     try:
         # Notify user about the process
@@ -362,16 +375,24 @@ async def generate_sample_video(client, message, file_path, new_name, duration=N
             try:
                 duration = float(stdout_duration.decode().strip())
             except ValueError:
-                # If we fail to fetch duration, set a default value (e.g., 30 seconds)
-                duration = 30.0
+                log_error(f"Failed to get duration for file: {file_path}. Error: {stderr_duration.decode()}")
+                duration = 30.0  # Default value if duration can't be fetched
 
         # Ensure we have at least 10 seconds to generate a sample
         random_start_time = random.uniform(0, max(1, duration - 10))
 
-        # Generate the sample video at the random start time
-        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t 10 -c copy "{sample_path}"'  # Clip 10 seconds sample
+        # Generate the sample video at the random start time (10-second clip)
+        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t 10 -c copy "{sample_path}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
+
+        # Log ffmpeg output for debugging purposes
+        if stderr:
+            log_error(f"FFmpeg error for sample video: {stderr.decode()}")
+
+        # Check if sample video was generated
+        if not os.path.exists(sample_path):
+            raise FileNotFoundError(f"Sample video not found at {sample_path}")
 
         # Send the sample video to the user
         await client.send_video(
@@ -386,8 +407,9 @@ async def generate_sample_video(client, message, file_path, new_name, duration=N
         await status_message.delete()
 
     except Exception as e:
-        # Notify user about the failure
-        await message.reply_text(f"⚠️ Failed to generate or send sample video.\n\n{e}")
+        error_message = f"⚠️ Failed to generate or send sample video.\n\n{e}"
+        log_error(error_message)
+        await message.reply_text(error_message)
 
     finally:
         # Cleanup
@@ -397,7 +419,8 @@ async def generate_sample_video(client, message, file_path, new_name, duration=N
 
 async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int = 3):
     """Generate screenshots at random moments from the main video and send them to the user in a media group."""
-    screenshots_dir = "downloads/screenshots"
+    
+    screenshots_dir = os.path.abspath(os.path.join("downloads", "screenshots"))
     os.makedirs(screenshots_dir, exist_ok=True)
 
     try:
@@ -412,6 +435,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         try:
             duration = float(stdout_duration.decode().strip())
         except ValueError:
+            log_error(f"Failed to get duration for screenshots: {file_path}. Error: {stderr_duration.decode()}")
             duration = 30.0  # Default value if duration can't be fetched
 
         screenshot_paths = []
@@ -419,10 +443,19 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             # Generate a random time for the screenshot
             random_time = random.uniform(0, max(1, duration))
 
-            screenshot_path = f"{screenshots_dir}/screenshot_{new_name}_{i}.png"
+            screenshot_path = os.path.join(screenshots_dir, f"screenshot_{new_name}_{i}.png")
             cmd = f'ffmpeg -ss {random_time} -i "{file_path}" -vframes 1 "{screenshot_path}"'
             process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            await process.communicate()
+            stdout, stderr = await process.communicate()
+
+            # Log ffmpeg output for debugging purposes
+            if stderr:
+                log_error(f"FFmpeg error for screenshot {i}: {stderr.decode()}")
+
+            # Check if the screenshot was generated
+            if not os.path.exists(screenshot_path):
+                raise FileNotFoundError(f"Screenshot not found at {screenshot_path}")
+
             screenshot_paths.append(screenshot_path)
 
         # Create media group with InputMediaPhoto
@@ -435,15 +468,16 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         await status_message.delete()
 
     except Exception as e:
-        # Notify user about the failure
-        await message.reply_text(f"⚠️ Failed to generate or send screenshots.\n\n{e}")
+        error_message = f"⚠️ Failed to generate or send screenshots.\n\n{e}"
+        log_error(error_message)
+        await message.reply_text(error_message)
 
     finally:
         # Cleanup
         for screenshot_path in screenshot_paths:
             if os.path.exists(screenshot_path):
                 os.remove(screenshot_path)
-        if os.path.exists(screenshots_dir):
+        if os.path.exists(screenshots_dir) and not os.listdir(screenshots_dir):  # Only remove directory if empty
             os.rmdir(screenshots_dir)
             
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
