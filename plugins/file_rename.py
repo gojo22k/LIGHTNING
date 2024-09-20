@@ -343,7 +343,7 @@ async def process_file(client, message, media, new_name, media_type):
     except Exception as e:
         pass
 
-async def generate_sample_video(client, message, file_path, new_name, duration):
+async def generate_sample_video(client, message, file_path, new_name, duration=None):
     """Generate a sample video at a random moment and send it to the user."""
     # Correct the file naming
     sample_name = f"SAMPLE_{new_name}"
@@ -353,18 +353,23 @@ async def generate_sample_video(client, message, file_path, new_name, duration):
         # Notify user about the process
         status_message = await message.reply_text("⚙️ **Generating sample video...**")
 
-        # Get video duration
-        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_duration, stderr_duration = await process_duration.communicate()
+        # If duration is not provided or invalid, try to extract it from the video
+        if not duration or duration <= 0:
+            cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+            process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout_duration, stderr_duration = await process_duration.communicate()
 
-        duration = float(stdout_duration.decode().strip())
+            try:
+                duration = float(stdout_duration.decode().strip())
+            except ValueError:
+                # If we fail to fetch duration, set a default value (e.g., 30 seconds)
+                duration = 30.0
 
-        # Generate a random start time for the sample
-        random_start_time = random.uniform(0, duration - 10)
+        # Ensure we have at least 10 seconds to generate a sample
+        random_start_time = random.uniform(0, max(1, duration - 10))
 
         # Generate the sample video at the random start time
-        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {duration} -c copy "{sample_path}"'
+        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t 10 -c copy "{sample_path}"'  # Clip 10 seconds sample
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
 
@@ -389,7 +394,8 @@ async def generate_sample_video(client, message, file_path, new_name, duration):
         if os.path.exists(sample_path):
             os.remove(sample_path)
 
-async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int):
+
+async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int = 3):
     """Generate screenshots at random moments from the main video and send them to the user in a media group."""
     screenshots_dir = "downloads/screenshots"
     os.makedirs(screenshots_dir, exist_ok=True)
@@ -402,12 +408,16 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
         process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_duration, stderr_duration = await process_duration.communicate()
-        duration = float(stdout_duration.decode().strip())
+
+        try:
+            duration = float(stdout_duration.decode().strip())
+        except ValueError:
+            duration = 30.0  # Default value if duration can't be fetched
 
         screenshot_paths = []
         for i in range(count):
             # Generate a random time for the screenshot
-            random_time = random.uniform(0, duration)
+            random_time = random.uniform(0, max(1, duration))
 
             screenshot_path = f"{screenshots_dir}/screenshot_{new_name}_{i}.png"
             cmd = f'ffmpeg -ss {random_time} -i "{file_path}" -vframes 1 "{screenshot_path}"'
@@ -435,7 +445,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
                 os.remove(screenshot_path)
         if os.path.exists(screenshots_dir):
             os.rmdir(screenshots_dir)
-
+            
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
     user_id = message.from_user.id
