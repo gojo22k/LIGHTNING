@@ -8,6 +8,6 @@ aiohttp
 pytz
 humanize
 pyromod
-ffmpeg-python==7.0.2
+ffmpeg-python
 shortzy
 pytz
