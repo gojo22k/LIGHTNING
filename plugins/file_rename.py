@@ -390,7 +390,7 @@ async def generate_sample_video(client, message, file_path, new_name, duration):
             os.remove(sample_path)
 
 async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int):
-    """Generate screenshots at random moments from the main video and send them to the user in a media group."""
+    """Generate screenshots at random moments from the main video and send them to the user in media groups."""
     screenshots_dir = "downloads/screenshots"
     os.makedirs(screenshots_dir, exist_ok=True)
 
@@ -415,11 +415,22 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             await process.communicate()
             screenshot_paths.append(screenshot_path)
 
-        # Create media group with InputMediaPhoto
-        media_group = [InputMediaPhoto(media=screenshot_path) for screenshot_path in screenshot_paths]
+            # Update progress message
+            await status_message.edit(f"📷 **Gᴇɴᴇʀᴀᴛɪɴɢ Sᴄʀᴇᴇɴsʜᴏᴛs...** {i + 1} | {count}")
 
-        # Send media group to user
-        await client.send_media_group(message.chat.id, media_group)
+        # Send media groups in batches of 10
+        for start in range(0, len(screenshot_paths), 10):
+            media_group = [InputMediaPhoto(media=screenshot_path) for screenshot_path in screenshot_paths[start:start + 10]]
+
+            try:
+                # Send media group to user
+                await client.send_media_group(message.chat.id, media_group)
+            except Exception as e:
+                if "MULTI_MEDIA_TOO_LONG" in str(e):
+                    await message.reply_text("⚠️ Too many screenshots to send in one group. Sending the next batch...")
+                    continue  # Skip to the next batch
+                else:
+                    await message.reply_text(f"⚠️ Failed to send media group.\n\n{e}")
 
         # Remove the status message
         await status_message.delete()
@@ -427,14 +438,6 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
     except Exception as e:
         # Notify user about the failure
         await message.reply_text(f"⚠️ Failed to generate or send screenshots.\n\n{e}")
-
-    finally:
-        # Cleanup
-        for screenshot_path in screenshot_paths:
-            if os.path.exists(screenshot_path):
-                os.remove(screenshot_path)
-        if os.path.exists(screenshots_dir):
-            os.rmdir(screenshots_dir)
 
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
