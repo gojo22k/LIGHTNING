@@ -356,7 +356,7 @@ async def get_video_duration(file_path):
     except ValueError as e:
         raise ValueError(f"Error converting duration: {duration_output}") from e
 
-async def generate_sample_video(client, message, file_path, new_name, duration):
+async def generate_sample_video(client, message, file_path, new_name, user_id, db):
     """Generate a sample video at a random moment and send it to the user."""
     sample_name = f"SAMPLE_{new_name}"
     sample_path = f"downloads/{sample_name}.mp4"
@@ -365,14 +365,17 @@ async def generate_sample_video(client, message, file_path, new_name, duration):
         # Notify user about the process
         status_message = await message.reply_text("⚙️ **Generating sample video...**")
 
-        # Get video duration
-        duration = await get_video_duration(file_path)
+        # Get the full video duration
+        video_duration = await get_video_duration(file_path)
 
-        # Generate a random start time for the sample
-        random_start_time = random.uniform(0, max(0, duration - 10))  # Ensure a valid range
+        # Fetch the sample video duration (preset2) from the database
+        sample_duration = await db.get_preset2(user_id)
 
-        # Generate the sample video at the random start time
-        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {duration} -c copy "{sample_path}"'
+        # Generate a random start time for the sample, ensuring it fits within the video duration
+        random_start_time = random.uniform(0, max(0, video_duration - sample_duration))
+
+        # Generate the sample video using the sample duration (preset2)
+        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {sample_duration} -c copy "{sample_path}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         await process.communicate()
 
