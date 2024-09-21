@@ -343,19 +343,6 @@ async def process_file(client, message, media, new_name, media_type):
     except Exception as e:
         pass
 
-async def get_video_duration(file_path):
-    """Get the duration of the video in seconds."""
-    cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-    process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-    stdout_duration, stderr_duration = await process_duration.communicate()
-    
-    # Decode and clean the output
-    duration_output = stdout_duration.decode().strip().split('\n')[0]
-    try:
-        return float(duration_output)  # Convert to float
-    except ValueError as e:
-        raise ValueError(f"Error converting duration: {duration_output}") from e
-
 async def generate_sample_video(client, message, file_path, new_name, user_id, db):
     """Generate a sample video at a random moment and send it to the user."""
     sample_name = f"SAMPLE_{new_name}"
@@ -390,6 +377,15 @@ async def generate_sample_video(client, message, file_path, new_name, user_id, d
 
         # Remove the status message
         await status_message.delete()
+
+    except Exception as e:
+        # Notify user about the failure
+        await message.reply_text(f"⚠️ Failed to generate or send sample video.\n\n{e}")
+
+    finally:
+        # Cleanup
+        if os.path.exists(sample_path):
+            os.remove(sample_path)
 
     except Exception as e:
         # Notify user about the failure
