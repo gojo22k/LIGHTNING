@@ -343,9 +343,21 @@ async def process_file(client, message, media, new_name, media_type):
     except Exception as e:
         pass
 
+async def get_video_duration(file_path):
+    """Get the duration of the video in seconds."""
+    cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+    process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    stdout_duration, stderr_duration = await process_duration.communicate()
+    
+    # Decode and clean the output
+    duration_output = stdout_duration.decode().strip().split('\n')[0]
+    try:
+        return float(duration_output)  # Convert to float
+    except ValueError as e:
+        raise ValueError(f"Error converting duration: {duration_output}") from e
+
 async def generate_sample_video(client, message, file_path, new_name, duration):
     """Generate a sample video at a random moment and send it to the user."""
-    # Correct the file naming
     sample_name = f"SAMPLE_{new_name}"
     sample_path = f"downloads/{sample_name}.mp4"
 
@@ -354,19 +366,15 @@ async def generate_sample_video(client, message, file_path, new_name, duration):
         status_message = await message.reply_text("⚙️ **Generating sample video...**")
 
         # Get video duration
-        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_duration, stderr_duration = await process_duration.communicate()
-
-        duration = float(stdout_duration.decode().strip())
+        duration = await get_video_duration(file_path)
 
         # Generate a random start time for the sample
-        random_start_time = random.uniform(0, duration - 10)
+        random_start_time = random.uniform(0, max(0, duration - 10))  # Ensure a valid range
 
         # Generate the sample video at the random start time
         cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {duration} -c copy "{sample_path}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout, stderr = await process.communicate()
+        await process.communicate()
 
         # Send the sample video to the user
         await client.send_video(
@@ -399,10 +407,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         status_message = await message.reply_text("⚙️ **Generating screenshots...**")
 
         # Get video duration
-        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_duration, stderr_duration = await process_duration.communicate()
-        duration = float(stdout_duration.decode().strip())
+        duration = await get_video_duration(file_path)
 
         screenshot_paths = []
         for i in range(count):
@@ -416,7 +421,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             screenshot_paths.append(screenshot_path)
 
             # Update progress message
-            await status_message.edit(f"📷 **Gᴇɴᴇʀᴀᴛɪɴɢ Sᴄʀᴇᴇɴsʜᴏᴛs...** {i + 1} | {count}")
+            await status_message.edit(f"📷 GENERATING SCREENSHOTS {i + 1} | {count}")
 
         # Send media groups in batches of 10
         for start in range(0, len(screenshot_paths), 10):
@@ -438,6 +443,14 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
     except Exception as e:
         # Notify user about the failure
         await message.reply_text(f"⚠️ Failed to generate or send screenshots.\n\n{e}")
+
+    finally:
+        # Cleanup
+        for screenshot_path in screenshot_paths:
+            if os.path.exists(screenshot_path):
+                os.remove(screenshot_path)
+        if os.path.exists(screenshots_dir):
+            os.rmdir(screenshots_dir)
 
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
