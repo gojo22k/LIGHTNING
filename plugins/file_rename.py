@@ -349,112 +349,121 @@ async def process_file(client, message, media, new_name, media_type):
 
 async def generate_sample_video(client, message, file_path, new_name, duration=30):
     """Generate a sample video at a random moment and send it to the user."""
-    sample_name = f"SAMPLE_{new_name}"
-    sample_path = f"/tmp/{sample_name}.mp4"  # Use /tmp for better portability
+    sample_name = f"SAMPLE_{new_name}.mp4"
+    sample_path = f"downloads/{sample_name}"
 
     try:
+        # Notify user about the process
         status_message = await message.reply_text("⚙️ **Generating sample video...**")
-        logger.info(f"Starting to generate sample video for {new_name} at {file_path}")
+        logging.info(f"Starting to generate sample video for {new_name} at {file_path}")
 
         # Get video duration
-        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_duration, stderr_duration = await process_duration.communicate()
-
         try:
-            duration = float(stdout_duration.decode().strip())
-        except ValueError:
-            logger.error("Failed to parse video duration, using default duration of 30s.")
-            duration = 30  # Default duration if parsing fails
+            cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+            process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout_duration, stderr_duration = await process_duration.communicate()
 
-        random_start_time = random.uniform(0, duration - 10)
-        logger.info(f"Random start time for sample: {random_start_time}s")
+            duration = float(stdout_duration.decode().strip())
+            logging.info(f"Parsed video duration: {duration}s")
+        except Exception as e:
+            duration = 30  # Use default if ffprobe fails
+            logging.error(f"Failed to parse video duration, using default duration of 30s. Error: {e}")
+
+        # Generate a random start time for the sample
+        random_start_time = random.uniform(0, max(0, duration - 10))
+        logging.info(f"Random start time for sample: {random_start_time}s")
 
         # Generate the sample video
-        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {duration} -c copy "{sample_path}"'
+        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t 10 -c copy "{sample_path}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout, stderr = await process.communicate()
 
-        if os.path.exists(sample_path):
-            await client.send_video(
-                message.chat.id,
-                sample_path,
-                caption=f"📹 Sample video for {new_name}",
-                progress=progress_for_pyrogram,
-                progress_args=("🚀 **Uploading Sample Video....**", message, time.time())
-            )
-            logger.info(f"Sample video generated at {sample_path}")
-        else:
-            logger.error(f"Sample video generation failed: {stderr.decode().strip()}")
-            raise FileNotFoundError(f"Sample video not found at {sample_path}")
+        if not os.path.exists(sample_path):
+            raise FileNotFoundError(f"Sample video generation failed: {stderr.decode().strip()}")
 
+        logging.info(f"Sample video generated at {sample_path}")
+
+        # Send the sample video to the user
+        await client.send_video(
+            message.chat.id,
+            sample_path,
+            caption=f"📹 Sample video for {new_name}",
+            progress=progress_for_pyrogram,
+            progress_args=("🚀 **Uploading Sample Video....**", message, time.time())
+        )
+
+        # Remove the status message
         await status_message.delete()
 
     except Exception as e:
-        logger.error(f"Error occurred while generating or sending sample video: {e}")
+        logging.error(f"Error occurred while generating or sending sample video: {e}")
         await message.reply_text(f"⚠️ Failed to generate or send sample video.\n\n{e}")
 
     finally:
+        # Cleanup
         if os.path.exists(sample_path):
             os.remove(sample_path)
-            logger.info(f"Cleaned up sample video at {sample_path}")
 
-async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int = 15):
+async def generate_screenshots(client, message, file_path, new_name, count=15):
     """Generate screenshots at random moments from the main video and send them to the user in a media group."""
-    screenshots_dir = "/tmp/screenshots"
+    screenshots_dir = "downloads/screenshots"
     os.makedirs(screenshots_dir, exist_ok=True)
-    screenshot_paths = []
 
     try:
+        # Notify user about the process
         status_message = await message.reply_text("⚙️ **Generating screenshots...**")
-        logger.info(f"Starting to generate {count} screenshots for {new_name} at {file_path}")
+        logging.info(f"Starting to generate {count} screenshots for {new_name} at {file_path}")
 
         # Get video duration
-        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
-        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        stdout_duration, stderr_duration = await process_duration.communicate()
-
         try:
+            cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+            process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout_duration, stderr_duration = await process_duration.communicate()
             duration = float(stdout_duration.decode().strip())
-        except ValueError:
-            logger.error("Failed to parse video duration, using default duration of 60s.")
-            duration = 60  # Default duration
+            logging.info(f"Parsed video duration: {duration}s")
+        except Exception as e:
+            duration = 60  # Default to 60s if ffprobe fails
+            logging.error(f"Failed to parse video duration, using default duration of 60s. Error: {e}")
 
+        screenshot_paths = []
         for i in range(count):
-            random_time = random.uniform(0, duration)
-            screenshot_path = f"{screenshots_dir}/screenshot_{new_name}_{i}.png"
-            cmd = f'ffmpeg -ss {random_time} -i "{file_path}" -vframes 1 "{screenshot_path}"'
-            process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            await process.communicate()
+            try:
+                random_time = random.uniform(0, duration)
+                screenshot_path = f"{screenshots_dir}/screenshot_{new_name}_{i}.png"
+                cmd = f'ffmpeg -ss {random_time} -i "{file_path}" -vframes 1 "{screenshot_path}"'
+                process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                await process.communicate()
 
-            if os.path.exists(screenshot_path):
-                screenshot_paths.append(screenshot_path)
-                logger.info(f"Screenshot {i + 1}/{count} generated at {random_time}s")
-            else:
-                logger.error(f"Failed to save screenshot: {screenshot_path}")
+                if os.path.exists(screenshot_path):
+                    screenshot_paths.append(screenshot_path)
+                    logging.info(f"Screenshot {i+1}/{count} saved at {random_time}s")
+                else:
+                    raise FileNotFoundError(f"Screenshot {i+1} could not be saved.")
+            except Exception as e:
+                logging.error(f"Failed to save screenshot {i+1}: {e}")
 
-        if screenshot_paths:
-            media_group = [InputMediaPhoto(media=path) for path in screenshot_paths]
-            await client.send_media_group(message.chat.id, media_group)
-            logger.info(f"Sent {len(screenshot_paths)} screenshots for {new_name}")
-        else:
-            raise Exception("No screenshots were generated successfully.")
+        # Ensure at least one screenshot was generated
+        if not screenshot_paths:
+            raise RuntimeError("No screenshots were generated successfully.")
 
+        # Send screenshots as a media group
+        media_group = [InputMediaPhoto(media=screenshot_path) for screenshot_path in screenshot_paths]
+        await client.send_media_group(message.chat.id, media_group)
+
+        # Remove the status message
         await status_message.delete()
 
     except Exception as e:
-        logger.error(f"Error occurred while generating or sending screenshots: {e}")
+        logging.error(f"Error occurred while generating or sending screenshots: {e}")
         await message.reply_text(f"⚠️ Failed to generate or send screenshots.\n\n{e}")
 
     finally:
+        # Cleanup
         for screenshot_path in screenshot_paths:
             if os.path.exists(screenshot_path):
                 os.remove(screenshot_path)
         if os.path.exists(screenshots_dir):
             os.rmdir(screenshots_dir)
-        logger.info(f"Cleaned up screenshot directory: {screenshots_dir}")
-
-
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
     user_id = message.from_user.id
