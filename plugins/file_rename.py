@@ -430,6 +430,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             logging.error("Failed to parse video duration, using default duration of 60s.")
             duration = 60.0  # Default duration
 
+        # Generate screenshots
         for i in range(count):
             # Generate a random time for the screenshot
             random_time = random.uniform(0, duration)
@@ -439,15 +440,23 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             cmd = f'ffmpeg -ss {random_time} -i "{file_path}" -vframes 1 "{screenshot_path}"'
             process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             await process.communicate()
-            screenshot_paths.append(screenshot_path)
+            if os.path.exists(screenshot_path):
+                screenshot_paths.append(screenshot_path)
+                logging.info(f"Screenshot saved: {screenshot_path}")
+            else:
+                logging.error(f"Failed to save screenshot: {screenshot_path}")
 
-        logging.info(f"{count} screenshots generated successfully.")
+        # Check if screenshots were generated successfully
+        if not screenshot_paths:
+            raise Exception("No screenshots were generated successfully.")
 
         # Create media group with InputMediaPhoto
+        logging.info(f"Attempting to send {len(screenshot_paths)} screenshots as a media group...")
         media_group = [InputMediaPhoto(media=screenshot_path) for screenshot_path in screenshot_paths]
 
         # Send media group to user
         await client.send_media_group(message.chat.id, media_group)
+        logging.info(f"{len(screenshot_paths)} screenshots sent successfully.")
 
         # Remove the status message
         await status_message.delete()
@@ -466,6 +475,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         if os.path.exists(screenshots_dir):
             os.rmdir(screenshots_dir)
             logging.info(f"Cleaned up screenshot directory: {screenshots_dir}")
+
 
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
