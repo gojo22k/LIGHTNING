@@ -5,6 +5,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
 import os, sys, time, asyncio
 from datetime import datetime, timedelta
+from .upgrade import show_upgrade_menu
 
 db = Database(Config.DB_URL, Config.DB_NAME)
 
@@ -196,16 +197,46 @@ async def remove_premium(bot: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"Error: {e}", quote=True)
 
+
 @Client.on_message(filters.command("myplan") & filters.private)
 async def my_plan(bot, message: Message):
     try:
         user_id = message.from_user.id
         user = await db.get_user_subscription(user_id)
+        
         if user and user['plan'] != 'Non-Premium':
             plan = user['plan']
             validity_end = user['validity_end'].strftime('%d-%m-%Y %H:%M:%S')
-            await message.reply_text(f"Your Plan: {plan}\nValidity Ends On: {validity_end}", quote=True)
+            
+            # Check if the validity end date has passed
+            current_time = datetime.now()
+            validity_end_datetime = user['validity_end']
+            
+            if validity_end_datetime < current_time:
+                expired_text = f"\n\nＥＸＰＩＲＥＤ"
+                # Add an upgrade button if the plan is expired
+                upgrade_button = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("𝗨𝗣𝗚𝗥𝗔𝗗𝗘", callback_data="upgrade_menu")]]
+                )
+                await message.reply_text(
+                    f"Your Plan: {plan}\nValidity Ends On: {validity_end}{expired_text}",
+                    quote=True,
+                    reply_markup=upgrade_button
+                )
+            else:
+                await message.reply_text(
+                    f"Your Plan: {plan}\nValidity Ends On: {validity_end}",
+                    quote=True
+                )
         else:
             await message.reply_text("You are not subscribed to any premium plan.", quote=True)
+    
     except Exception as e:
         await message.reply_text(f"Error: {e}", quote=True)
+
+# Add a handler for the upgrade button callback
+@Client.on_callback_query(filters.regex("upgrade_menu"))
+async def upgrade_menu_callback(bot, callback_query):
+    user_id = callback_query.from_user.id
+    await callback_query.answer()  # Acknowledge the callback query
+    await show_upgrade_menu(bot, callback_query.message.chat.id, user_id)
