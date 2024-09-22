@@ -216,7 +216,7 @@ async def process_file(client, message, media, new_name, media_type):
     # Check if sample video should be generated
     if sample_video_response == "✅":
         preset_duration = await db.get_preset2(message.from_user.id)  # Fetch sample video duration
-        await generate_sample_video(client, message, file_path, new_name, duration=preset_duration)
+        await generate_sample_video(client, message, file_path, new_name, user_id, database)
 
     # Check if metadata should be added
     _bool_metadata = await db.get_metadata(message.chat.id)
