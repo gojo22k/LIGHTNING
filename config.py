@@ -110,6 +110,6 @@ Exᴀᴍᴩʟᴇ:- <code> /set_caption 📕 Fɪʟᴇ Nᴀᴍᴇ: {filename}
 ┣⪼ 🔥 Bᴏᴛ Bʏ: @AniflixAnkit
 ╰━━━━━━━━━━━━━━━━━━━➣
 
-<b>⦿ Channel:</b> <a href=https://t.me/aniflixClou> 
+<b>⦿ Channel:</b> <a href=https://t.me/Aniflix_Official> 
 🅰🅽🅸🅵🅻🅸🆇 😎</a>
 </b>"""
