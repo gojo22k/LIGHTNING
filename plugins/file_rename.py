@@ -362,7 +362,9 @@ async def generate_sample_video(client, message, file_path, new_name, user_id, d
         process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         stdout_duration, stderr_duration = await process_duration.communicate()
 
-        total_duration = float(stdout_duration.decode().strip())
+        # Decode the output and handle multiple lines
+        duration_lines = stdout_duration.decode().strip().split("\n")
+        total_duration = float(duration_lines[0])  # Parse the first line as the video duration
 
         # Ensure the sample video is shorter than the total video duration
         if preset_duration >= total_duration:
