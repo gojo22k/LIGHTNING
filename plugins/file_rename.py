@@ -399,6 +399,7 @@ async def generate_sample_video(client, message, file_path, new_name, user_id, d
         if os.path.exists(sample_path):
             os.remove(sample_path)
 
+
 async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int):
     """Generate screenshots at random moments from the main video and send them to the user in media groups."""
     screenshots_dir = "downloads/screenshots"
@@ -409,7 +410,10 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         status_message = await message.reply_text("⚙️ **Generating screenshots...**")
 
         # Get video duration
-        duration = await get_video_duration(file_path)
+        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout_duration, stderr_duration = await process_duration.communicate()
+        duration = float(stdout_duration.decode().strip())
 
         screenshot_paths = []
         for i in range(count):
@@ -423,7 +427,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
             screenshot_paths.append(screenshot_path)
 
             # Update progress message
-            await status_message.edit(f"📷 GENERATING SCREENSHOTS {i + 1} | {count}")
+            await status_message.edit(f"📷 **GENERATING SCREENSHOTS {i + 1} | {count}**")
 
         # Send media groups in batches of 10
         for start in range(0, len(screenshot_paths), 10):
@@ -446,6 +450,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
         # Notify user about the failure
         await message.reply_text(f"⚠️ Failed to generate or send screenshots.\n\n{e}")
 
+
     finally:
         # Cleanup
         for screenshot_path in screenshot_paths:
@@ -453,6 +458,7 @@ async def generate_screenshots(client: Client, message, file_path: str, new_name
                 os.remove(screenshot_path)
         if os.path.exists(screenshots_dir):
             os.rmdir(screenshots_dir)
+
             
 @Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
 async def auto_rename_files(client, message):
