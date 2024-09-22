@@ -343,8 +343,9 @@ async def process_file(client, message, media, new_name, media_type):
     except Exception as e:
         pass
 
-async def generate_sample_video(client, message, file_path, new_name, user_id, db):
-    """Generate a sample video at a random moment and send it to the user."""
+async def generate_sample_video(client, message, file_path, new_name, user_id, database):
+    """Generate a sample video at a moment based on the preset2 duration and send it to the user."""
+    # Correct the file naming
     sample_name = f"SAMPLE_{new_name}"
     sample_path = f"downloads/{sample_name}.mp4"
 
@@ -352,19 +353,26 @@ async def generate_sample_video(client, message, file_path, new_name, user_id, d
         # Notify user about the process
         status_message = await message.reply_text("⚙️ **Generating sample video...**")
 
-        # Get the full video duration
-        video_duration = await get_video_duration(file_path)
+        # Fetch the preset2 value from the database
+        preset_duration = await database.get_preset2(user_id)  # Fetch duration in seconds
 
-        # Fetch the sample video duration (preset2) from the database
-        sample_duration = await db.get_preset2(user_id)
+        # Get video duration
+        cmd_duration = f'ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "{file_path}"'
+        process_duration = await asyncio.create_subprocess_shell(cmd_duration, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout_duration, stderr_duration = await process_duration.communicate()
+        video_duration = float(stdout_duration.decode().strip())
 
-        # Generate a random start time for the sample, ensuring it fits within the video duration
-        random_start_time = random.uniform(0, max(0, video_duration - sample_duration))
+        # Ensure that the preset duration is not longer than the total video duration
+        if preset_duration > video_duration:
+            preset_duration = video_duration  # Cap the duration to the length of the video
 
-        # Generate the sample video using the sample duration (preset2)
-        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {sample_duration} -c copy "{sample_path}"'
+        # Generate a random start time, ensuring there's enough room for the sample length
+        random_start_time = random.uniform(0, video_duration - preset_duration)
+
+        # Generate the sample video at the random start time using the preset2 duration
+        cmd = f'ffmpeg -ss {random_start_time} -i "{file_path}" -t {preset_duration} -c copy "{sample_path}"'
         process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        await process.communicate()
+        stdout, stderr = await process.communicate()
 
         # Send the sample video to the user
         await client.send_video(
@@ -387,14 +395,6 @@ async def generate_sample_video(client, message, file_path, new_name, user_id, d
         if os.path.exists(sample_path):
             os.remove(sample_path)
 
-    except Exception as e:
-        # Notify user about the failure
-        await message.reply_text(f"⚠️ Failed to generate or send sample video.\n\n{e}")
-
-    finally:
-        # Cleanup
-        if os.path.exists(sample_path):
-            os.remove(sample_path)
 
 async def generate_screenshots(client: Client, message, file_path: str, new_name: str, count: int):
     """Generate screenshots at random moments from the main video and send them to the user in media groups."""
