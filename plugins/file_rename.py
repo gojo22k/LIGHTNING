@@ -222,7 +222,7 @@ async def process_file(client, message, media, new_name, media_type, user_id):
     # Check if metadata should be added
     _bool_metadata = await db.get_metadata(message.chat.id)
     if _bool_metadata:
-        metadata_path = f"Metadata/{new_name}"
+        metadata_path = f"downloads/{new_name}"
         metadata = await db.get_metadata_code(message.chat.id)
         if metadata:
             try:
