@@ -234,13 +234,30 @@ async def process_file(client, message, media, new_name, media_type, user_id):
                 
                 # FFmpeg command to add metadata
                 cmd = f"""ffmpeg -i "{path}" {metadata} "{metadata_path}" """
-                process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 
+                # Log the command being run
+                print(f"Running FFmpeg command: {cmd}")
+    
+                # Execute the command
+                process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    
+                # Log that the FFmpeg process has started
+                print("FFmpeg process started...")
+    
                 # Wait for the FFmpeg process to complete
                 stdout, stderr = await process.communicate()
     
-                # Check for any errors from FFmpeg
+                # Log that the process has completed
+                print("FFmpeg process completed")
+    
+                # Decode the output and error logs
                 er = stderr.decode()
+                out = stdout.decode()
+    
+                # Log both stdout and stderr for debugging
+                print(f"FFmpeg stdout: {out}")
+                print(f"FFmpeg stderr: {er}")
+    
                 if er:
                     # If an error occurred, log the error and notify the user, but don't stop the process
                     await ms.edit(f"⚠️ **Error occurred while adding metadata:**\n\n`{er}`")
@@ -250,7 +267,8 @@ async def process_file(client, message, media, new_name, media_type, user_id):
                     # Metadata was added successfully, notify the user
                     await ms.edit("**Metadata added to the file successfully ✅**\n\n📤 **Trying to upload....**")
             except Exception as e:
-                # If an exception occurred, notify the user and continue to the next step
+                # If an exception occurred, log it and notify the user
+                print(f"Exception occurred: {e}")
                 await ms.edit(f"⚠️ **An error occurred while adding metadata:**\n\n`{e}`")
                 # Continue to the upload step without metadata
                 metadata_path = path  # Fall back to the original path
