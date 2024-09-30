@@ -221,23 +221,50 @@ async def process_file(client, message, media, new_name, media_type, user_id):
 
     # Check if metadata should be added
     _bool_metadata = await db.get_metadata(message.chat.id)
+    
+    # Define the new path for the metadata-added file
+    metadata_path = f"downloads/{new_name}"
+    
     if _bool_metadata:
-        metadata_path = f"downloads/{new_name}"
         metadata = await db.get_metadata_code(message.chat.id)
         if metadata:
             try:
-                await ms.edit("I Found Your Metadata\n\n__**Adding Metadata To File....**")
+                # Notify the user that metadata is being added
+                await ms.edit("I found your metadata\n\n__**Adding metadata to file....**")
+                
+                # FFmpeg command to add metadata
                 cmd = f"""ffmpeg -i "{path}" {metadata} "{metadata_path}" """
                 process = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                
+                # Wait for the FFmpeg process to complete
                 stdout, stderr = await process.communicate()
+    
+                # Check for any errors from FFmpeg
                 er = stderr.decode()
                 if er:
-                    return await ms.edit(f"{er}\n\n**Error**")
+                    # If an error occurred, log the error and notify the user, but don't stop the process
+                    await ms.edit(f"⚠️ **Error occurred while adding metadata:**\n\n`{er}`")
+                    # Continue to the upload step without metadata
+                    metadata_path = path  # Fall back to the original path
+                else:
+                    # Metadata was added successfully, notify the user
+                    await ms.edit("**Metadata added to the file successfully ✅**\n\n📤 **Trying to upload....**")
             except Exception as e:
-                return await ms.edit(f"⚠️ Error Occurred ☹️\n\n{e}")
-        await ms.edit("**Metadata added to the file successfully ✅**\n\n⚠️ __**Trying to upload....**")
+                # If an exception occurred, notify the user and continue to the next step
+                await ms.edit(f"⚠️ **An error occurred while adding metadata:**\n\n`{e}`")
+                # Continue to the upload step without metadata
+                metadata_path = path  # Fall back to the original path
+        else:
+            # No metadata found, continue without adding metadata
+            metadata_path = path  # Fall back to the original path
+            await ms.edit("⚠️ **No metadata found.**\n\n📤 **Trying to upload....**")
     else:
+        # Metadata addition is not required, proceed with the original file
+        metadata_path = path
         await ms.edit("📤 **Trying to upload....**")
+    
+    # Now proceed to the upload step with the `metadata_path` (whether metadata was added or not)
+
 
     duration = 0
     try:
