@@ -7,7 +7,7 @@ from os import environ
 API = environ.get("API", "81aa9734c37474fbc63b3dcb719eaf14ecd8f27f") # shortlink api
 URL = environ.get("URL", "ziplinker.net") # shortlink domain without https://
 VERIFY_TUTORIAL = environ.get("VERIFY_TUTORIAL", "https://t me/MisterBrutal") # how to open link 
-BOT_USERNAME = environ.get("BOT_USERNAME", "FastFileRenamer4GBot") # bot username without @
+BOT_USERNAME = environ.get("BOT_USERNAME", "FileRenamer4GBot") # bot username without @
 VERIFY = False  # Convert string to boolean
 
 id_pattern = re.compile(r'^.\d+$')
@@ -33,8 +33,8 @@ class Config(object):
     ADMIN = [int(admin) if id_pattern.search(
         admin) else admin for admin in os.environ.get('ADMIN', '1740287480').split()]  # ⚠️ Required
     
-    FORCE_SUB = os.environ.get("FORCE_SUB", "Aniflix_Official") # ⚠️ Required Username without @
-    LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002219568827"))  # ⚠️ Required
+    FORCE_SUB = os.environ.get("FORCE_SUB", "Aniflix_Network") # ⚠️ Required Username without @
+    LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002151954601"))  # ⚠️ Required
     FLOOD = int(os.environ.get("FLOOD", '105'))
     BANNED_USERS = set(int(x) for x in os.environ.get(
         "BANNED_USERS", "1234567890").split())
